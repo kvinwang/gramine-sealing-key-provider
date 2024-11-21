@@ -1,0 +1,47 @@
+# Gramine manifest template for Sealing Key Provider
+loader.entrypoint = "file:{{ gramine.libos }}"
+libos.entrypoint = "{{ self_exe }}"
+
+loader.log_level = "{{ log_level }}"
+
+loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}"
+loader.env.MALLOC_ARENA_MAX = "1"
+loader.env.RUST_BACKTRACE = "full"
+# Set RUST_LOG based on Gramine log level
+loader.env.RUST_LOG = "{{ 'debug' if log_level == 'debug' else 'info' }}"
+
+fs.mounts = [
+  { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+  { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
+  { path = "/quotes", uri = "file:quotes" },
+]
+
+sgx.debug = {{ 'true' if log_level == 'debug' else 'false' }}
+sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+
+# Enable remote attestation
+sgx.remote_attestation = "dcap"
+
+# TODO remove this later once we build a better way to pass the TDX App quote, example, an endpoint or something else
+loader.insecure__use_cmdline_argv = true
+
+# Required files and devices for quote generation and key access
+sgx.allowed_files = [
+  "file:/etc/hosts",
+  "file:/etc/resolv.conf",
+  "file:quotes/tdxQuote.txt",
+  "file:quotes",
+]
+
+sgx.trusted_files = [
+  "file:{{ gramine.libos }}",
+  "file:{{ self_exe }}",
+  "file:{{ gramine.runtimedir() }}/",
+  "file:{{ arch_libdir }}/",
+]
+
+sgx.thread_num = 4
+sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '4' }}
+
+# Enable enclave measurement for sealing
+sgx.enable_stats = true
