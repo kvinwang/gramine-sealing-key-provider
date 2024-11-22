@@ -60,11 +60,11 @@ endif
 
 .PHONY: run-provider
 run-provider: all
-	$(GRAMINE) gramine-sealing-key-provider $(QUOTE_PATH)
+	$(GRAMINE) gramine-sealing-key-provider
 
 .PHONY: clean
 clean:
-	$(RM) -rf *.token *.sig *.manifest.sgx *.manifest OUTPUT
+	$(RM) -rf *.token *.sig *.manifest.sgx *.manifest
 
 .PHONY: distclean
 distclean: clean
@@ -76,13 +76,12 @@ help:
 	@echo "Gramine Sealing Key Provider Makefile"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make SGX=1 DEBUG=1 DEV_MODE=1 run-provider QUOTE_PATH=quotes/tdxQuote.txt"
+	@echo "  make SGX=1 DEBUG=1 DEV_MODE=1 run-provider"
 	@echo ""
 	@echo "Options:"
 	@echo "  SGX=1         Enable SGX mode"
 	@echo "  DEBUG=1       Enable debug logging"
 	@echo "  DEV_MODE=1    Enable development mode (skips TDX quote verification)"
-	@echo "  QUOTE_PATH    Path to the TDX quote file"
 	@echo ""
 	@echo "Targets:"
 	@echo "  all           Build everything"
