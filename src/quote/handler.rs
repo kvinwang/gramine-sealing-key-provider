@@ -1,6 +1,6 @@
 use crate::crypto::{derive_key, encrypt_key, extract_public_key};
 use crate::error::ProviderError;
-use crate::gramine::{get_local_quote, get_sealing_key};
+use crate::gramine::{get_quote_with_data, get_sealing_key};
 use dcap_qvl::{
     collateral::get_collateral_from_pcs,
     quote::{Quote, Report},
@@ -9,44 +9,51 @@ use dcap_qvl::{
 use log::{debug, error, info, warn};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub async fn process_quotes(tdx_quote_data: &[u8]) -> Result<Vec<u8>, ProviderError> {
+#[derive(Debug)]
+pub struct ProviderResponse {
+    pub provider_quote: Vec<u8>,
+}
+
+pub async fn process_quotes(tdx_quote_data: &[u8]) -> Result<ProviderResponse, ProviderError> {
     info!("Starting quote processing");
     debug!("Input quote length: {} bytes", tdx_quote_data.len());
     debug!("Input quote (hex): {}", hex::encode(tdx_quote_data));
 
     // 1. Verify TDX quote
-    #[cfg(feature = "dev-mode")]
-    {
-        warn!("Development mode enabled");
-        warn!("Skipping quote verification in dev mode");
-    }
+    verify_quote(tdx_quote_data).await?;
 
-    #[cfg(not(feature = "dev-mode"))]
-    {
-        info!("Production mode - performing full quote verification");
-        verify_quote(tdx_quote_data).await?;
-    }
-
-    // 2. Parse quotes
+    // 2. Parse TDX quote early
     let tdx_quote = parse_quote(tdx_quote_data.to_vec())?;
-    let sgx_quote_data = get_local_quote()?;
-    let sgx_quote = parse_quote(sgx_quote_data)?;
+    
+    // 3. Get initial provider quote (without encrypted key)
+    info!("Getting initial provider quote for PPID verification");
+    let initial_provider_quote = get_quote_with_data(&[])?;  // Empty user data
+    let provider_quote_parsed = parse_quote(initial_provider_quote)?;
+    
+    // 4. Early PPID verification
+    info!("Performing early PPID verification");
+    verify_ppid_match(&provider_quote_parsed.quote, &tdx_quote.quote)?;
 
-    // 3. Verify PPID match
-    verify_ppid_match(&sgx_quote.quote, &tdx_quote.quote)?;
-
-    // 4. Get measurements and derive key
+    // 5. Only proceed with expensive operations after PPID match
     let sealing_key = get_sealing_key()?;
     let measurements = extract_measurements(&tdx_quote.quote)?;
     let derived_key = derive_key(&sealing_key, &measurements);
 
-    // 5. Extract public key and encrypt response
+    // 6. Extract public key and encrypt derived key
     let report_data = get_report_data(&tdx_quote.quote)?;
     let public_key = extract_public_key(report_data)?;
     let encrypted_key = encrypt_key(&derived_key, &public_key)?;
 
-    info!("Successfully processed quote and encrypted response");
-    Ok(encrypted_key)
+    // 7. Get final quote with encrypted key in user report data
+    debug!("Getting final quote with encrypted key in report data");
+    let final_provider_quote = get_quote_with_data(&encrypted_key)?;
+
+    info!("Successfully processed quote and generated response");
+    debug!("Final provider quote length: {} bytes", final_provider_quote.len());
+
+    Ok(ProviderResponse {
+        provider_quote: final_provider_quote,
+    })
 }
 
 fn parse_quote(data: Vec<u8>) -> Result<QuoteData, ProviderError> {
@@ -56,8 +63,13 @@ fn parse_quote(data: Vec<u8>) -> Result<QuoteData, ProviderError> {
     Ok(QuoteData { quote })
 }
 
-#[cfg(not(feature = "dev-mode"))]
 async fn verify_quote(quote_data: &[u8]) -> Result<(), ProviderError> {
+    #[cfg(feature = "dev-mode")]
+    {
+        warn!("Skipping quote verification in dev mode");
+        return Ok(());
+    }
+    
     debug!("Verifying quote with DCAP");
 
     let collateral = get_collateral_from_pcs(quote_data, std::time::Duration::from_secs(10))
@@ -84,8 +96,11 @@ fn verify_ppid_match(sgx_quote: &Quote, tdx_quote: &Quote) -> Result<(), Provide
     let sgx_ppid = &sgx_quote.header.user_data[..16];
     let tdx_ppid = &tdx_quote.header.user_data[..16];
 
-    debug!("SGX PPID: {}", hex::encode(sgx_ppid));
-    debug!("TDX PPID: {}", hex::encode(tdx_ppid));
+    info!("Performing PPID verification");
+    debug!("SGX Quote Header: {:?}", sgx_quote.header);
+    debug!("TDX Quote Header: {:?}", tdx_quote.header);
+    debug!("SGX PPID (hex): {}", hex::encode(sgx_ppid));
+    debug!("TDX PPID (hex): {}", hex::encode(tdx_ppid));
 
     #[cfg(feature = "dev-mode")]
     {
@@ -95,10 +110,12 @@ fn verify_ppid_match(sgx_quote: &Quote, tdx_quote: &Quote) -> Result<(), Provide
 
     if sgx_ppid != tdx_ppid {
         error!("PPID mismatch between SGX and TDX quotes");
+        error!("SGX PPID: {}", hex::encode(sgx_ppid));
+        error!("TDX PPID: {}", hex::encode(tdx_ppid));
         return Err(ProviderError::PPIDMismatch);
     }
 
-    info!("PPID match confirmed");
+    info!("PPID match confirmed, proceeding with key derivation");
     Ok(())
 }
 

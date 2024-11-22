@@ -1,3 +1,3 @@
 mod interface;
 
-pub use interface::{get_local_quote, get_sealing_key};
+pub use interface::{get_quote_with_data, get_sealing_key};

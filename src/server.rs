@@ -12,7 +12,7 @@ struct QuoteRequest {
 
 #[derive(Serialize, Deserialize)]
 struct QuoteResponse {
-    encrypted_key: Vec<u8>,
+    provider_quote: Vec<u8>,
 }
 
 pub struct Server {
@@ -67,10 +67,14 @@ async fn handle_connection(mut socket: TcpStream) -> Result<(), ProviderError> {
     debug!("Received quote of {} bytes", request.quote.len());
 
     // Process quote
-    let encrypted_key = process_quotes(&request.quote).await?;
-
+    let provider_response = process_quotes(&request.quote).await?;
+    
+    
     // Prepare response
-    let response = QuoteResponse { encrypted_key };
+    let response = QuoteResponse {
+        provider_quote: provider_response.provider_quote,
+    };
+
     let response_data = serde_json::to_vec(&response)?;
 
     // Send response length
