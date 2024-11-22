@@ -1,6 +1,16 @@
 # Makefile for Gramine Sealing Key Provider
 ARCH_LIBDIR ?= /lib/$(shell $(CC) -dumpmachine)
+SGX ?= 1
+DEBUG ?= 0
+DEV_MODE ?= 0
 SELF_EXE = target/release/gramine-sealing-key-provider
+
+# Set flags based on DEV_MODE
+ifeq ($(DEV_MODE),1)
+CARGO_FLAGS = --features dev-mode
+else
+CARGO_FLAGS =
+endif
 
 .PHONY: all
 all: $(SELF_EXE) gramine-sealing-key-provider.manifest
@@ -14,8 +24,17 @@ else
 GRAMINE_LOG_LEVEL = error
 endif
 
-$(SELF_EXE): Cargo.toml
-	cargo build --release
+# Print build mode information
+.PHONY: print-mode
+print-mode:
+	@echo "Build Configuration:"
+	@echo "  SGX: $(SGX)"
+	@echo "  Debug: $(DEBUG)"
+	@echo "  Dev Mode: $(DEV_MODE)"
+	@echo "  Cargo Flags: $(CARGO_FLAGS)"
+
+$(SELF_EXE): Cargo.toml print-mode
+	cargo build --release $(CARGO_FLAGS)
 
 gramine-sealing-key-provider.manifest: gramine-sealing-key-provider.manifest.template
 	gramine-manifest \
@@ -50,3 +69,24 @@ clean:
 .PHONY: distclean
 distclean: clean
 	$(RM) -rf target/ Cargo.lock
+
+# Help target
+.PHONY: help
+help:
+	@echo "Gramine Sealing Key Provider Makefile"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make SGX=1 DEBUG=1 DEV_MODE=1 run-provider QUOTE_PATH=quotes/tdxQuote.txt"
+	@echo ""
+	@echo "Options:"
+	@echo "  SGX=1         Enable SGX mode"
+	@echo "  DEBUG=1       Enable debug logging"
+	@echo "  DEV_MODE=1    Enable development mode (skips TDX quote verification)"
+	@echo "  QUOTE_PATH    Path to the TDX quote file"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all           Build everything"
+	@echo "  run-provider  Run the provider"
+	@echo "  clean         Clean build artifacts"
+	@echo "  distclean     Clean everything including cargo artifacts"
+	@echo "  help          Show this help message"

@@ -9,10 +9,47 @@ This service acts as a secure bridge between TDX workloads and SGX sealing keys,
 ### Key Features
 
 - Stateless design for simplicity and security
-- DCAP quote verification for platform validation
+- DCAP quote verification for platform validation (configurable)
 - Measurement-based key derivation for TDX workloads
 - PPID matching to ensure same-platform operation
+- Public key encryption of derived keys
+- Development mode for testing
 - Detailed debug logging for troubleshooting
+
+## System Flow
+
+```mermaid
+sequenceDiagram
+    participant TDX as TDX App
+    participant SGX as SGX Sealing Provider
+    participant PCCS as PCCS Server
+
+    Note over TDX: Generate keypair for<br/>response encryption
+    Note over TDX: Include public key in<br/>quote's report data
+    TDX->>SGX: Send TDX quote
+    
+    rect rgb(200, 200, 240)
+        Note over SGX: Development Mode (Optional)
+        SGX-->>PCCS: Skip quote verification
+    end
+    
+    rect rgb(240, 240, 240)
+        Note over SGX: Production Mode
+        SGX->>PCCS: Get collateral
+        PCCS-->>SGX: Return collateral
+        Note over SGX: Verify TDX quote
+    end
+    
+    Note over SGX: Get local SGX quote
+    Note over SGX: Compare PPIDs
+    Note over SGX: Extract measurements<br/>from TDX quote
+    Note over SGX: Get SGX sealing key
+    Note over SGX: Derive unique key using<br/>measurements
+    Note over SGX: Extract public key from<br/>quote's report data
+    Note over SGX: Encrypt derived key<br/>with public key
+    SGX->>TDX: Return encrypted key
+    Note over TDX: Decrypt key using<br/>private key
+```
 
 ## Prerequisites
 
@@ -32,11 +69,14 @@ cd gramine-sealing-key-provider
 
 2. Build the project:
 ```bash
-# Regular build
+# Production build
 make SGX=1
 
-# Build with debug logging enabled
-make SGX=1 DEBUG=1
+# Development build (skips quote verification)
+make SGX=1 DEV_MODE=1
+
+# Build with debug logging
+make SGX=1 DEBUG=1 DEV_MODE=1
 ```
 
 ## Usage
@@ -50,32 +90,60 @@ mkdir -p /quotes
 # Copy your TDX quote
 cp /path/to/your/tdx_quote /quotes/
 
-# Run the provider
-make SGX=1 run-provider QUOTE_PATH=/quotes/tdx_quote
+# Run the provider in development mode
+make SGX=1 DEV_MODE=1 run-provider QUOTE_PATH=/quotes/tdx_quote
 
 # With debug logging
-make SGX=1 DEBUG=1 run-provider QUOTE_PATH=/quotes/tdx_quote
+make SGX=1 DEBUG=1 DEV_MODE=1 run-provider QUOTE_PATH=/quotes/tdx_quote
+```
+
+### Production Mode
+
+```bash
+# Run the provider with full security features
+make SGX=1 run-provider QUOTE_PATH=/quotes/tdx_quote
 ```
 
 ### Output
 
-The service outputs the derived key in hexadecimal format to stdout. In debug mode, it also provides detailed logging about the quote processing and key derivation steps.
+The service outputs the encrypted derived key in hexadecimal format to stdout. In debug mode, it also provides detailed logging about:
+- Quote parsing and verification
+- PPID comparison
+- Measurement extraction
+- Key derivation steps
+- Encryption process
 
 ## How It Works
 
-1. Service receives a TDX quote as input
-2. Retrieves its own SGX quote and sealing key
-3. Compares PPIDs from both quotes to verify same-platform execution
-4. Extracts measurements (MRTD and RTMRs) from the TDX quote
-5. Derives a unique key using the measurements and SGX sealing key
-6. Returns the derived key
+1. TDX App Preparation:
+   - Generates a keypair
+   - Includes public key in quote's report data
+   - Generates TDX quote
+
+2. Service Operation:
+   - Receives TDX quote as input
+   - Verifies quote with DCAP (in production mode)
+   - Retrieves its own SGX quote and sealing key
+   - Compares PPIDs from both quotes
+   - Extracts measurements from TDX quote
+   - Derives unique key using measurements and SGX sealing key
+   - Encrypts derived key with public key from quote
+   - Returns encrypted key
+
+3. TDX App Completion:
+   - Receives encrypted key
+   - Decrypts using private key
 
 ## Security Considerations
 
-- The service operates within an SGX enclave
+- Service operates within an SGX enclave
 - PPID matching ensures same-platform operation
+- Quote verification in production mode
+- Public key encryption of derived keys
+- Development mode clearly marked with warnings
 - Measurement-based key derivation provides unique keys per TDX workload
-- Currently uses basic file I/O for development (see Future Work for improvements)
+
+[Rest of the README remains the same...]
 
 ## Future Work
 
