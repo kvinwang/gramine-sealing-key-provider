@@ -25,6 +25,11 @@ sgx.remote_attestation = "dcap"
 # TODO remove this later once we build a better way to pass the TDX App quote, example, an endpoint or something else
 loader.insecure__use_cmdline_argv = true
 
+# Reduce number of worker threads for tokio
+loader.env.TOKIO_WORKER_THREADS = "1"
+
+sys.insecure__allow_eventfd = true
+
 # Required files and devices for quote generation and key access
 sgx.allowed_files = [
   "file:/etc/hosts",
@@ -40,8 +45,8 @@ sgx.trusted_files = [
   "file:{{ arch_libdir }}/",
 ]
 
-sgx.thread_num = 4
-sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '4' }}
+sgx.thread_num = 32
+sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '32' }}
 
 # Enable enclave measurement for sealing
 sgx.enable_stats = true
