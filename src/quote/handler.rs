@@ -23,7 +23,7 @@ pub async fn process_quotes(tdx_quote_data: &[u8]) -> Result<ProviderResponse, P
     debug!("Input quote (hex): {}", hex::encode(tdx_quote_data));
 
     // 1. Verify TDX quote
-    verify_quote(tdx_quote_data).await?;
+    verify_quote(tdx_quote_data).await.or(Err(ProviderError::DcapError))?;
 
     // 2. Parse TDX quote early
     let tdx_quote = parse_quote(tdx_quote_data.to_vec())?;
