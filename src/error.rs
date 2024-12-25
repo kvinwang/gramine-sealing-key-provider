@@ -33,12 +33,6 @@ pub enum ProviderError {
     CryptoError(String),
 }
 
-impl From<dcap_qvl::Error> for ProviderError {
-    fn from(_: dcap_qvl::Error) -> Self {
-        ProviderError::DcapError
-    }
-}
-
 impl From<serde_json::Error> for ProviderError {
     fn from(e: serde_json::Error) -> Self {
         ProviderError::SerializationError(e.to_string())
